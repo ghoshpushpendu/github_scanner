@@ -55,6 +55,9 @@ const resolvers = {
                 repo: repoName,
             });
 
+            const filesCount = await getFileCount(repo.owner.login, repo.name);
+            console.log('filesCount', filesCount);
+
             // Additional logic to get details like private/public, number of files, content of 1 YAML file, active webhooks, etc.
             // ...
 
@@ -63,11 +66,28 @@ const resolvers = {
                 size: repo.size,
                 owner: repo.owner.login,
                 isPrivate: repo.private,
+                filesCount: filesCount
                 // Add other details as needed
             };
         },
     },
 };
+
+async function getFileCount(owner, repo) {
+    try {
+        // Get the root directory content of the repository
+        const response = await octokit.rest.repos.getContent({
+            owner,
+            repo,
+        });
+
+        // Filter out files from the response
+        const files = response.data.filter(item => item.type === 'file');
+        return files.length;
+    } catch (error) {
+        console.error('Error fetching repository content:', error.message);
+    }
+}
 
 const server = new ApolloServer({ typeDefs, resolvers });
 

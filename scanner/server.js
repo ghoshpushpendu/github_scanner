@@ -1,5 +1,6 @@
 const { ApolloServer, gql } = require('apollo-server');
 const { Octokit } = require('octokit');
+const axios = require('axios');
 require('dotenv').config();
 
 console.log('MY_GITHUB_TOKEN', process.env.GITHUB_TOKEN);
@@ -53,7 +54,19 @@ const resolvers = {
 
             const filesCount = await getFileCount(repo.owner.login, repo.name);
             const webhooks = await getActiveWebhooks(repo.owner.login, repo.name);
-            const ymlContent = await getContentOfYamlFiles(repo.owner.login, repo.name);
+            const yamlFile = await findYamlFile(repo.owner.login, repo.name, '');
+            let ymlContent = 'No YAML files found';
+            console.log('yamlFile', yamlFile);
+            if (yamlFile) {
+                try {
+                    const contentResponse = await axios.get(yamlFile.download_url);
+                    ymlContent = contentResponse.data;
+                } catch (e) {
+                    console.log('e', e)
+                }
+            } else {
+                ymlContent = 'No YAML files found';
+            }
 
             // Additional logic to get details like private/public, number of files, content of 1 YAML file, active webhooks, etc.
             // ...
@@ -110,34 +123,35 @@ async function getActiveWebhooks(owner, repo) {
     }
 }
 
-async function getContentOfYamlFiles(owner, repo) {
+async function findYamlFile(owner, repo, path = '') {
     try {
         // Get the list of files in the repository
-        const response = await octokit.rest.repos.getContent({
+        const filesResponse = await octokit.rest.repos.getContent({
             owner: owner,
             repo: repo,
-            path: '', // Path to the root directory
+            path: path, // Path to the root directory
         });
 
         // Filter for YAML files
-        const yamlFiles = response.data.filter(file => file.name.endsWith('.yaml') || file.name.endsWith('.yml'));
+        let yamlFile;
 
-        if (yamlFiles.length === 0) {
-            return 'No YAML files found';
+        for (const file of filesResponse.data) {
+            if (file.type === 'file' && (file.name.endsWith('.yml') || file.name.endsWith('.yaml'))) {
+                // Fetch content of the YAML file
+                yamlFile = file;
+                break;
+            } else if (file.type === 'dir') {
+                // Recursively scan subdirectory
+                const subdirectoryPath = `${path}/${file.name}`;
+                const subDirectoryYamlFile = await findYamlFile(owner, repo, subdirectoryPath);
+                if (subDirectoryYamlFile) {
+                    yamlFile = subDirectoryYamlFile;
+                    break;
+                }
+            }
         }
-        console.log('YAML files:', yamlFiles);
-        // Fetch and log the content of each YAML file
-        const contentResponse = await octokit.rest.repos.getContent({
-            owner: owner,
-            repo: repo,
-            path: yamlFiles[0].path,
-        });
 
-        // Decode the content from base64
-        const content = Buffer.from(contentResponse.data.content, 'base64').toString('utf-8');
-        console.log('Content of YAML file:', content);
-        return content;
-
+        return yamlFile;
     } catch (error) {
         console.error('Error fetching YAML files:', error.message);
     }

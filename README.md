@@ -3,8 +3,9 @@ Steps to run the code:
     Clone the code from main branch
     #to run BE services
     cd scanner
-    npm install
+    Generate GITHUB personal access token on github.com
     Please update GITHUB_TOKEN env var in .env file inside the scanner project
+    npm install
     node index.js (Backend nodejs will start running)
 
     #to run FE services
